@@ -1,0 +1,52 @@
+name: Import AI chat
+
+# Started from the site's "Import AI chat" button (or manually from the Actions tab).
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Public share link (ChatGPT, Claude or Gemini)
+        required: true
+      folder:
+        description: Folder to save into
+        default: content/AI Chats
+      tags:
+        description: Comma-separated tags (optional)
+        default: ''
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - id: imp
+        # xvfb gives the importer a virtual screen in case it needs a visible browser.
+        run: xvfb-run -a node scripts/import.js "$URL" --folder "$FOLDER" --tags "$TAGS"
+        env:
+          URL: ${{ inputs.url }}
+          FOLDER: ${{ inputs.folder }}
+          TAGS: ${{ inputs.tags }}
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add content
+          git commit -m "⚡ Import AI chat: $TITLE"
+          git push
+        env:
+          TITLE: ${{ steps.imp.outputs.title }}
+
+  # Pushes made by this workflow don't trigger other workflows, so deploy here.
+  deploy:
+    needs: import
+    uses: ./.github/workflows/deploy.yml
